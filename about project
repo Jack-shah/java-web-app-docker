@@ -1,0 +1,48 @@
+#ssh Agent Plugin is used to ssh with the docker server where deployment to be done
+
+pipeline {
+    agent any
+    tools{
+        maven('maven393')
+    }
+
+    stages {
+        stage('checkout') {
+            steps {
+                echo 'Hello World'
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Jack-shah/java-web-app-docker.git']])
+            }
+        }
+        stage('Mvn Goal') {
+            steps {
+                echo 'running mvn goals'
+                sh "mvn clean package"
+            }
+        }
+        stage('Docker build') {
+            steps {
+                echo 'Building docker image'
+                sh "docker build -t awajid980/project3:${env.BUILD_NUMBER} ."
+            }
+        }
+        stage('Push image to docker hub') {
+            steps {
+                echo 'pushing docker image'
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'dpasswd', usernameVariable: 'duser')]) {
+                 // some 
+                sh "docker login -u ${env.duser} -p ${env.dpasswd}"
+                sh "docker push awajid980/project3:${env.BUILD_NUMBER}"
+                }
+            }
+        }
+        stage('Deploy image to deploy server') {
+            steps {
+                echo 'deploy docker image'
+                sshagent(['remotessh']) {
+                    sh"ssh -o strictHostKeyChecking=no ubuntu@52.66.210.251 docker rm -f mycontainer ||true"
+                    sh"ssh -o strictHostKeyChecking=no ubuntu@52.66.210.251 docker run -d -p 8080:8080 --name mycontainer awajid980/project3:${env.BUILD_NUMBER}"
+                }
+            }
+        }
+    }
+}
